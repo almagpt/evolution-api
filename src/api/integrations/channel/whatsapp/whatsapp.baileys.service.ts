@@ -675,17 +675,14 @@ export class BaileysStartupService extends ChannelStartupService {
       userDevicesCache: this.userDevicesCache,
       transactionOpts: { maxCommitRetries: 10, delayBetweenTriesMs: 3000 },
       patchMessageBeforeSending(message) {
+        // Não usar JSON.parse(JSON.stringify): quebra instâncias Long do protobuf (this.isZero is not a function).
         if (
           message.deviceSentMessage?.message?.listMessage?.listType === proto.Message.ListMessage.ListType.PRODUCT_LIST
         ) {
-          message = JSON.parse(JSON.stringify(message));
-
           message.deviceSentMessage.message.listMessage.listType = proto.Message.ListMessage.ListType.SINGLE_SELECT;
         }
 
-        if (message.listMessage?.listType == proto.Message.ListMessage.ListType.PRODUCT_LIST) {
-          message = JSON.parse(JSON.stringify(message));
-
+        if (message.listMessage?.listType === proto.Message.ListMessage.ListType.PRODUCT_LIST) {
           message.listMessage.listType = proto.Message.ListMessage.ListType.SINGLE_SELECT;
         }
 

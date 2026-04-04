@@ -12,15 +12,16 @@ WORKDIR /evolution
 COPY ./package*.json ./
 COPY ./tsconfig.json ./
 COPY ./tsup.config.ts ./
+# postinstall runs prisma generate via runWithProvider.js — both must exist before npm ci
+COPY ./runWithProvider.js ./
+COPY ./prisma ./prisma
 
 RUN npm ci --silent
 
 COPY ./src ./src
 COPY ./public ./public
-COPY ./prisma ./prisma
 COPY ./manager ./manager
 COPY ./.env.example ./.env
-COPY ./runWithProvider.js ./
 
 COPY ./Docker ./Docker
 

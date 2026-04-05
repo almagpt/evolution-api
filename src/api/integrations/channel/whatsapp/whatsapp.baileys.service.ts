@@ -2153,6 +2153,12 @@ export class BaileysStartupService extends ChannelStartupService {
     if (messageId) option.messageId = messageId;
 
     if (message['listMessage']) {
+      // Baileys 7.x usa getMessageType() no relayMessage: listas caem em getMediaType() !== '' → type "media".
+      // O WhatsApp espera stanza type "text" + nó <biz><list/> (como no baileys-pro); "media" quebra a UI da lista.
+      if (contextInfo) {
+        message['contextInfo'] = contextInfo;
+      }
+
       if (message.listMessage.listType === proto.Message.ListMessage.ListType.PRODUCT_LIST) {
         message.listMessage.listType = proto.Message.ListMessage.ListType.SINGLE_SELECT;
       }
@@ -2177,6 +2183,7 @@ export class BaileysStartupService extends ChannelStartupService {
       const id = await this.client.relayMessage(sender, m.message!, {
         messageId: m.key?.id,
         useCachedGroupMetadata: option.useCachedGroupMetadata,
+        additionalAttributes: { type: 'text' },
         additionalNodes: [
           {
             tag: 'biz',

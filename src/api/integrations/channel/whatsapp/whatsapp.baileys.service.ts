@@ -2152,6 +2152,54 @@ export class BaileysStartupService extends ChannelStartupService {
     // NOTE: NÃO DEVEMOS GERAR O messageId AQUI, SOMENTE SE VIER INFORMADO POR PARAMETRO. A GERAÇÃO ANTERIOR IMPEDE O WZAP DE IDENTIFICAR A SOURCE.
     if (messageId) option.messageId = messageId;
 
+    if (message['listMessage']) {
+      if (message.listMessage.listType === proto.Message.ListMessage.ListType.PRODUCT_LIST) {
+        message.listMessage.listType = proto.Message.ListMessage.ListType.SINGLE_SELECT;
+      }
+
+      if (mentions?.length) {
+        const jidList = mentions.filter((j): j is string => Boolean(j));
+        if (jidList.length) {
+          message.listMessage.contextInfo = { ...(message.listMessage.contextInfo || {}), mentionedJid: jidList };
+        }
+      }
+
+      const listTypeName =
+        proto.Message.ListMessage.ListType[message.listMessage.listType]?.toLowerCase() || 'single_select';
+
+      const m = generateWAMessageFromContent(sender, message, {
+        timestamp: new Date(),
+        userJid: this.instance.wuid,
+        messageId,
+        quoted,
+      });
+
+      const id = await this.client.relayMessage(sender, m.message!, {
+        messageId: m.key?.id,
+        useCachedGroupMetadata: option.useCachedGroupMetadata,
+        additionalNodes: [
+          {
+            tag: 'biz',
+            attrs: {},
+            content: [
+              {
+                tag: 'list',
+                attrs: { v: '2', type: listTypeName },
+              },
+            ],
+          },
+        ],
+      });
+
+      m.key = { id: id, remoteJid: sender, participant: isPnUser(sender) ? sender : undefined, fromMe: true };
+      for (const [key, value] of Object.entries(m)) {
+        if (!value || (isArray(value) && value.length) === 0) {
+          delete m[key];
+        }
+      }
+      return m;
+    }
+
     if (message['viewOnceMessage']) {
       const m = generateWAMessageFromContent(sender, message, {
         timestamp: new Date(),
@@ -3431,31 +3479,18 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   public async listMessage(data: SendListDto) {
-    const NUM_EMOJI = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-    const lines: string[] = [];
-
-    if (data.title) lines.push(`*${data.title}*`);
-    if (data.description) lines.push(data.description);
-    lines.push('');
-
-    let idx = 0;
-    for (const sec of data.sections ?? []) {
-      if (sec.title) lines.push(`*${sec.title}*`);
-      for (const row of sec.rows ?? []) {
-        const emoji = idx < NUM_EMOJI.length ? NUM_EMOJI[idx] : `*${idx + 1}.*`;
-        const desc = row.description ? ` — ${row.description}` : '';
-        lines.push(`${emoji} ${row.title}${desc}`);
-        idx++;
-      }
-      lines.push('');
-    }
-
-    if (data.footerText) lines.push(`_${data.footerText}_`);
-    if (data.buttonText) lines.push(`\n_${data.buttonText}_`);
-
     return await this.sendMessageWithTyping(
       data.number,
-      { conversation: lines.join('\n').trim() },
+      {
+        listMessage: {
+          title: data.title,
+          description: data.description,
+          buttonText: data?.buttonText,
+          footerText: data?.footerText,
+          sections: data.sections,
+          listType: proto.Message.ListMessage.ListType.PRODUCT_LIST,
+        },
+      },
       {
         delay: data?.delay,
         presence: 'composing',

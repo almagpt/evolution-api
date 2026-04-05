@@ -2204,36 +2204,6 @@ export class BaileysStartupService extends ChannelStartupService {
       );
     }
 
-    // Lista interativa: o caminho `forward` quebra a renderização no app (menu não aparece).
-    // Mesmo padrão de viewOnce — relay direto do proto com quoted / ephemeral.
-    if (message['listMessage'] && sender !== 'status@broadcast') {
-      if (mentions?.length) {
-        const lm = message.listMessage as proto.Message.IListMessage;
-        const jidList = mentions.filter((j): j is string => Boolean(j));
-        if (jidList.length) {
-          lm.contextInfo = { ...(lm.contextInfo || {}), mentionedJid: jidList };
-        }
-      }
-      const m = generateWAMessageFromContent(sender, message, {
-        timestamp: new Date(),
-        userJid: this.instance.wuid,
-        messageId,
-        quoted,
-        ephemeralExpiration,
-      });
-      const id = await this.client.relayMessage(sender, m.message, {
-        messageId: m.key?.id,
-        useCachedGroupMetadata: option.useCachedGroupMetadata,
-      });
-      m.key = { id: id, remoteJid: sender, participant: isPnUser(sender) ? sender : undefined, fromMe: true };
-      for (const [k, value] of Object.entries(m)) {
-        if (!value || (isArray(value) && value.length) === 0) {
-          delete m[k];
-        }
-      }
-      return m;
-    }
-
     if (!message['audio'] && !message['poll'] && !message['sticker'] && sender != 'status@broadcast') {
       return await this.client.sendMessage(
         sender,
@@ -3461,27 +3431,54 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   public async listMessage(data: SendListDto) {
-    return await this.sendMessageWithTyping(
-      data.number,
-      {
-        listMessage: {
-          title: data.title,
-          description: data.description,
-          buttonText: data?.buttonText,
-          footerText: data?.footerText,
-          sections: data.sections,
-          // WAProto: SINGLE_SELECT=1 (menu), PRODUCT_LIST=2 (catálogo). 2 quebra lista comum no app.
-          listType: proto.Message.ListMessage.ListType.SINGLE_SELECT,
+    const sections = (data.sections ?? []).map((sec) => ({
+      title: sec.title,
+      rows: (sec.rows ?? []).map((row) => ({
+        header: row.title,
+        title: row.title,
+        description: row.description ?? '',
+        id: row.rowId,
+      })),
+    }));
+
+    let bodyText = '';
+    if (data.title) bodyText += `*${data.title}*`;
+    if (data.description) {
+      if (bodyText) bodyText += '\n\n';
+      bodyText += data.description;
+    }
+    if (!bodyText) bodyText = ' ';
+
+    const message: proto.IMessage = {
+      viewOnceMessage: {
+        message: {
+          interactiveMessage: {
+            body: { text: bodyText },
+            footer: { text: data?.footerText ?? '' },
+            nativeFlowMessage: {
+              buttons: [
+                {
+                  name: 'single_select',
+                  buttonParamsJson: JSON.stringify({
+                    title: data.buttonText ?? 'Ver opções',
+                    sections,
+                  }),
+                },
+              ],
+              messageParamsJson: JSON.stringify({ from: 'api', templateId: v4() }),
+            },
+          },
         },
       },
-      {
-        delay: data?.delay,
-        presence: 'composing',
-        quoted: data?.quoted,
-        mentionsEveryOne: data?.mentionsEveryOne,
-        mentioned: data?.mentioned,
-      },
-    );
+    };
+
+    return await this.sendMessageWithTyping(data.number, message, {
+      delay: data?.delay,
+      presence: 'composing',
+      quoted: data?.quoted,
+      mentionsEveryOne: data?.mentionsEveryOne,
+      mentioned: data?.mentioned,
+    });
   }
 
   public async contactMessage(data: SendContactDto) {

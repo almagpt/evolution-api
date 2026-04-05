@@ -3440,7 +3440,8 @@ export class BaileysStartupService extends ChannelStartupService {
           buttonText: data?.buttonText,
           footerText: data?.footerText,
           sections: data.sections,
-          listType: 2,
+          // WAProto: SINGLE_SELECT=1 (menu), PRODUCT_LIST=2 (catálogo). 2 quebra lista comum no app.
+          listType: proto.Message.ListMessage.ListType.SINGLE_SELECT,
         },
       },
       {

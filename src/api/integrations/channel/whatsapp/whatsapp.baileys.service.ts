@@ -2153,8 +2153,7 @@ export class BaileysStartupService extends ChannelStartupService {
     if (messageId) option.messageId = messageId;
 
     if (message['listMessage']) {
-      // Baileys 7.x usa getMessageType() no relayMessage: listas caem em getMediaType() !== '' → type "media".
-      // O WhatsApp espera stanza type "text" + nó <biz><list/> (como no baileys-pro); "media" quebra a UI da lista.
+      // Envio direto via relayMessage + patch em baileys (patches/baileys+*.patch): type=text, sem mediatype=list nos <enc/>, nó <biz><list/>.
       if (contextInfo) {
         message['contextInfo'] = contextInfo;
       }
@@ -2170,9 +2169,6 @@ export class BaileysStartupService extends ChannelStartupService {
         }
       }
 
-      const listTypeName =
-        proto.Message.ListMessage.ListType[message.listMessage.listType]?.toLowerCase() || 'single_select';
-
       const m = generateWAMessageFromContent(sender, message, {
         timestamp: new Date(),
         userJid: this.instance.wuid,
@@ -2183,19 +2179,6 @@ export class BaileysStartupService extends ChannelStartupService {
       const id = await this.client.relayMessage(sender, m.message!, {
         messageId: m.key?.id,
         useCachedGroupMetadata: option.useCachedGroupMetadata,
-        additionalAttributes: { type: 'text' },
-        additionalNodes: [
-          {
-            tag: 'biz',
-            attrs: {},
-            content: [
-              {
-                tag: 'list',
-                attrs: { v: '2', type: listTypeName },
-              },
-            ],
-          },
-        ],
       });
 
       m.key = { id: id, remoteJid: sender, participant: isPnUser(sender) ? sender : undefined, fromMe: true };

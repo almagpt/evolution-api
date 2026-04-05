@@ -1,0 +1,54 @@
+diff --git a/node_modules/baileys/lib/Socket/messages-send.js b/node_modules/baileys/lib/Socket/messages-send.js
+index 074978f..5333e5e 100644
+--- a/node_modules/baileys/lib/Socket/messages-send.js
++++ b/node_modules/baileys/lib/Socket/messages-send.js
+@@ -440,7 +440,9 @@ export const makeMessagesSocket = (config) => {
+         }
+         await authState.keys.transaction(async () => {
+             const mediaType = getMediaType(message);
+-            if (mediaType) {
++            // List messages must not carry mediatype=list on <enc/> (breaks interactive list UI on clients).
++            const listRoot = normalizeMessageContent(message)?.listMessage;
++            if (mediaType && !listRoot) {
+                 extraAttrs['mediatype'] = mediaType;
+             }
+             if (isNewsletter) {
+@@ -721,9 +723,24 @@ export const makeMessagesSocket = (config) => {
+                     content: tcTokenBuffer
+                 });
+             }
+-            if (additionalNodes && additionalNodes.length > 0) {
+-                ;
+-                stanza.content.push(...additionalNodes);
++            const nodesToPush = [...(additionalNodes || [])];
++            const innerForListBiz = normalizeMessageContent(message);
++            if (innerForListBiz?.listMessage && !isNewsletter) {
++                const hasListBiz = nodesToPush.some((n) => n.tag === 'biz' &&
++                    Array.isArray(n.content) &&
++                    n.content.some((c) => c && c.tag === 'list'));
++                if (!hasListBiz) {
++                    const lt = innerForListBiz.listMessage.listType;
++                    const typeName = proto.Message.ListMessage.ListType[lt]?.toLowerCase?.() || 'single_select';
++                    nodesToPush.push({
++                        tag: 'biz',
++                        attrs: {},
++                        content: [{ tag: 'list', attrs: { v: '2', type: typeName } }],
++                    });
++                }
++            }
++            if (nodesToPush.length > 0) {
++                stanza.content.push(...nodesToPush);
+             }
+             logger.debug({ msgId }, `sending message to ${participants.length} devices`);
+             await sendNode(stanza);
+@@ -741,6 +758,10 @@ export const makeMessagesSocket = (config) => {
+         if (message.eventMessage) {
+             return 'event';
+         }
++        // Interactive list: stanza must be type=text + biz/list (see baileys-pro); type=media breaks rendering.
++        if (normalizeMessageContent(message)?.listMessage) {
++            return 'text';
++        }
+         if (getMediaType(message) !== '') {
+             return 'media';
+         }

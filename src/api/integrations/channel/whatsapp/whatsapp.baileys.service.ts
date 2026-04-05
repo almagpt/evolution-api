@@ -114,11 +114,13 @@ import makeWASocket, {
   isJidGroup,
   isJidNewsletter,
   isPnUser,
+  isRealMessage,
   jidNormalizedUser,
   makeCacheableSignalKeyStore,
   MessageUpsertType,
   MessageUserReceiptUpdate,
   MiscMessageGenerationOptions,
+  normalizeMessageContent,
   ParticipantAction,
   prepareWAMessageMedia,
   Product,
@@ -1124,6 +1126,14 @@ export class BaileysStartupService extends ChannelStartupService {
           const editedMessage =
             received?.message?.protocolMessage || received?.message?.editedMessage?.message?.protocolMessage;
 
+          /** Texto/mídia real: não usar só `protocolMessage` truthy (WAProto pode incluir o campo vazio ou antes de `conversation` no objeto). */
+          const normalizedRecv = normalizeMessageContent(received.message);
+          const meIdForReal = jidNormalizedUser(this.instance.wuid || this.client?.authState?.creds?.me?.id || '');
+          const processIncomingBody =
+            isRealMessage(received as WAMessage, meIdForReal) ||
+            !!(normalizedRecv as any)?.reactionMessage ||
+            !!(normalizedRecv as any)?.pollUpdateMessage;
+
           if (editedMessage) {
             if (this.configService.get<Chatwoot>('CHATWOOT').ENABLED && this.localChatwoot?.enabled)
               this.chatwootService.eventWhatsapp(
@@ -1165,7 +1175,7 @@ export class BaileysStartupService extends ChannelStartupService {
             }
           }
 
-          if ((type !== 'notify' && type !== 'append') || editedMessage || !received?.message) {
+          if ((type !== 'notify' && type !== 'append') || !received?.message || !processIncomingBody) {
             continue;
           }
 
@@ -4691,8 +4701,9 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   private prepareMessage(message: proto.IWebMessageInfo): any {
-    const contentType = getContentType(message.message);
-    const contentMsg = message?.message[contentType] as any;
+    const normalizedForType = normalizeMessageContent(message.message) || message.message;
+    const contentType = getContentType(normalizedForType);
+    const contentMsg = normalizedForType?.[contentType] as any;
 
     const messageRaw = {
       key: message.key, // Save key exactly as it comes from Baileys

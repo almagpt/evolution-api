@@ -155,7 +155,12 @@ import { v4 } from 'uuid';
 import { BaileysMessageProcessor } from './baileysMessage.processor';
 import { useVoiceCallsBaileys } from './voiceCalls/useVoiceCallsBaileys';
 
-export interface ExtendedIMessageKey extends proto.IMessageKey {
+/** Filtro JSON em `message.key` (Prisma); não estende proto.IMessageKey para compatibilidade com forks do Baileys. */
+export interface ExtendedIMessageKey {
+  id?: string;
+  fromMe?: boolean;
+  participant?: string;
+  remoteJid?: string;
   remoteJidAlt?: string;
   participantAlt?: string;
   server_id?: string;
@@ -4481,7 +4486,8 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   public async fetchAllGroups(getParticipants: GetParticipant) {
-    const fetch = Object.values(await this?.client?.groupFetchAllParticipating());
+    const participating = await this?.client?.groupFetchAllParticipating();
+    const fetch = Object.values(participating ?? {}) as GroupMetadata[];
 
     let groups = [];
     for (const group of fetch) {

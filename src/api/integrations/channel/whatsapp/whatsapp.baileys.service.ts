@@ -2204,6 +2204,36 @@ export class BaileysStartupService extends ChannelStartupService {
       );
     }
 
+    // Lista interativa: o caminho `forward` quebra a renderização no app (menu não aparece).
+    // Mesmo padrão de viewOnce — relay direto do proto com quoted / ephemeral.
+    if (message['listMessage'] && sender !== 'status@broadcast') {
+      if (mentions?.length) {
+        const lm = message.listMessage as proto.Message.IListMessage;
+        const jidList = mentions.filter((j): j is string => Boolean(j));
+        if (jidList.length) {
+          lm.contextInfo = { ...(lm.contextInfo || {}), mentionedJid: jidList };
+        }
+      }
+      const m = generateWAMessageFromContent(sender, message, {
+        timestamp: new Date(),
+        userJid: this.instance.wuid,
+        messageId,
+        quoted,
+        ephemeralExpiration,
+      });
+      const id = await this.client.relayMessage(sender, m.message, {
+        messageId: m.key?.id,
+        useCachedGroupMetadata: option.useCachedGroupMetadata,
+      });
+      m.key = { id: id, remoteJid: sender, participant: isPnUser(sender) ? sender : undefined, fromMe: true };
+      for (const [k, value] of Object.entries(m)) {
+        if (!value || (isArray(value) && value.length) === 0) {
+          delete m[k];
+        }
+      }
+      return m;
+    }
+
     if (!message['audio'] && !message['poll'] && !message['sticker'] && sender != 'status@broadcast') {
       return await this.client.sendMessage(
         sender,

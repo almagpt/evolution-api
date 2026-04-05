@@ -3431,54 +3431,39 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   public async listMessage(data: SendListDto) {
-    const sections = (data.sections ?? []).map((sec) => ({
-      title: sec.title,
-      rows: (sec.rows ?? []).map((row) => ({
-        header: row.title,
-        title: row.title,
-        description: row.description ?? '',
-        id: row.rowId,
-      })),
-    }));
+    const NUM_EMOJI = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+    const lines: string[] = [];
 
-    let bodyText = '';
-    if (data.title) bodyText += `*${data.title}*`;
-    if (data.description) {
-      if (bodyText) bodyText += '\n\n';
-      bodyText += data.description;
+    if (data.title) lines.push(`*${data.title}*`);
+    if (data.description) lines.push(data.description);
+    lines.push('');
+
+    let idx = 0;
+    for (const sec of data.sections ?? []) {
+      if (sec.title) lines.push(`*${sec.title}*`);
+      for (const row of sec.rows ?? []) {
+        const emoji = idx < NUM_EMOJI.length ? NUM_EMOJI[idx] : `*${idx + 1}.*`;
+        const desc = row.description ? ` — ${row.description}` : '';
+        lines.push(`${emoji} ${row.title}${desc}`);
+        idx++;
+      }
+      lines.push('');
     }
-    if (!bodyText) bodyText = ' ';
 
-    const message: proto.IMessage = {
-      viewOnceMessage: {
-        message: {
-          interactiveMessage: {
-            body: { text: bodyText },
-            footer: { text: data?.footerText ?? '' },
-            nativeFlowMessage: {
-              buttons: [
-                {
-                  name: 'single_select',
-                  buttonParamsJson: JSON.stringify({
-                    title: data.buttonText ?? 'Ver opções',
-                    sections,
-                  }),
-                },
-              ],
-              messageParamsJson: JSON.stringify({ from: 'api', templateId: v4() }),
-            },
-          },
-        },
+    if (data.footerText) lines.push(`_${data.footerText}_`);
+    if (data.buttonText) lines.push(`\n_${data.buttonText}_`);
+
+    return await this.sendMessageWithTyping(
+      data.number,
+      { conversation: lines.join('\n').trim() },
+      {
+        delay: data?.delay,
+        presence: 'composing',
+        quoted: data?.quoted,
+        mentionsEveryOne: data?.mentionsEveryOne,
+        mentioned: data?.mentioned,
       },
-    };
-
-    return await this.sendMessageWithTyping(data.number, message, {
-      delay: data?.delay,
-      presence: 'composing',
-      quoted: data?.quoted,
-      mentionsEveryOne: data?.mentionsEveryOne,
-      mentioned: data?.mentioned,
-    });
+    );
   }
 
   public async contactMessage(data: SendContactDto) {

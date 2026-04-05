@@ -18,6 +18,10 @@ COPY ./runWithProvider.js ./
 COPY ./prisma ./prisma
 
 RUN npm ci --silent
+# Garante patch do Baileys (listas) mesmo se postinstall falhar em parte; falha a build se o patch não existir no pacote.
+RUN npx patch-package
+RUN grep -q "innerForListBiz" node_modules/baileys/lib/Socket/messages-send.js || \
+    (echo "ERROR: baileys list patch missing — copy ./patches before npm ci and keep patches/baileys+7.0.0-rc.9.patch in the repo" && exit 1)
 
 COPY ./src ./src
 COPY ./public ./public
